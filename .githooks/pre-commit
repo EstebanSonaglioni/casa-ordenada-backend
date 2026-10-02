@@ -1,0 +1,18 @@
+#!/bin/sh
+set -eu
+
+version_file="VERSION"
+current_version=$(tr -d '[:space:]' < "$version_file")
+if ! printf '%s\n' "$current_version" | awk -F. 'NF == 3 && $1 ~ /^(0|[1-9][0-9]*)$/ && $2 ~ /^(0|[1-9][0-9]*)$/ && $3 ~ /^(0|[1-9][0-9]*)$/ { found = 1 } END { exit !found }'; then
+  printf 'VERSION inválida: %s\n' "$current_version" >&2
+  exit 1
+fi
+
+old_ifs=$IFS
+IFS=.
+set -- $current_version
+IFS=$old_ifs
+next_version="$1.$2.$(( $3 + 1 ))"
+printf '%s\n' "$next_version" > "$version_file"
+git add "$version_file"
+printf 'Versión preparada: %s\n' "$next_version"

@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+
+version=$(tr -d '[:space:]' < VERSION)
+tag="v$version"
+if git rev-parse "$tag" >/dev/null 2>&1; then
+  printf 'El tag %s ya existe.\n' "$tag" >&2
+  exit 1
+fi
+git tag -a "$tag" -m "Release $version" HEAD
+printf 'Tag creado: %s\n' "$tag"
