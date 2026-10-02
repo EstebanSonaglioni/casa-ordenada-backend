@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, Numeric, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
@@ -37,6 +37,27 @@ class Category(Base):
     is_active: Mapped[bool] = mapped_column(default=True)
 
 
+class Currency(Base):
+    __tablename__ = "currencies"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    code: Mapped[str] = mapped_column(String(3), unique=True)
+    name: Mapped[str] = mapped_column(String(60))
+    symbol: Mapped[str] = mapped_column(String(5))
+    decimal_places: Mapped[int] = mapped_column(Integer, default=2)
+    is_active: Mapped[bool] = mapped_column(default=True)
+
+
+class ExchangeRate(Base):
+    __tablename__ = "exchange_rates"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    base_currency_id: Mapped[int] = mapped_column(ForeignKey("currencies.id"), index=True)
+    quote_currency_id: Mapped[int] = mapped_column(ForeignKey("currencies.id"), index=True)
+    rate: Mapped[float] = mapped_column(Numeric(20, 8))
+    effective_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class PlanningPeriod(Base):
     __tablename__ = "planning_periods"
     __table_args__ = (UniqueConstraint("household_id", "year", "month"),)
@@ -56,6 +77,7 @@ class Income(Base):
     source: Mapped[str] = mapped_column(String(100))
     received_from: Mapped[str] = mapped_column(String(100))
     amount_cents: Mapped[int] = mapped_column(Integer)
+    currency_id: Mapped[int] = mapped_column(ForeignKey("currencies.id"), default=1)
     received_on: Mapped[date] = mapped_column(Date)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -68,10 +90,22 @@ class RecurringExpense(Base):
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
     name: Mapped[str] = mapped_column(String(120))
     amount_cents: Mapped[int] = mapped_column(Integer)
+    currency_id: Mapped[int] = mapped_column(ForeignKey("currencies.id"), default=1)
     amount_type: Mapped[str] = mapped_column(String(20), default="fixed")
     due_day: Mapped[int] = mapped_column(Integer)
+    due_date: Mapped[date | None] = mapped_column(Date, nullable=True)
     frequency: Mapped[str] = mapped_column(String(20), default="monthly")
     active: Mapped[bool] = mapped_column(default=True)
+
+
+class RecurringPayment(Base):
+    __tablename__ = "recurring_payments"
+    __table_args__ = (UniqueConstraint("recurring_expense_id", "due_date"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recurring_expense_id: Mapped[int] = mapped_column(ForeignKey("recurring_expenses.id"), index=True)
+    due_date: Mapped[date] = mapped_column(Date)
+    paid_on: Mapped[date] = mapped_column(Date)
 
 
 class PlannedExpense(Base):
@@ -82,6 +116,7 @@ class PlannedExpense(Base):
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
     description: Mapped[str] = mapped_column(String(160))
     estimated_amount_cents: Mapped[int] = mapped_column(Integer)
+    currency_id: Mapped[int] = mapped_column(ForeignKey("currencies.id"), default=1)
     target_date: Mapped[date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(20), default="planned")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -94,6 +129,7 @@ class MonthlyAllocation(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     planning_period_id: Mapped[int] = mapped_column(ForeignKey("planning_periods.id"), index=True)
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
+    currency_id: Mapped[int] = mapped_column(ForeignKey("currencies.id"), default=1)
     planned_amount_cents: Mapped[int] = mapped_column(Integer, default=0)
     reserved_amount_cents: Mapped[int] = mapped_column(Integer, default=0)
 
@@ -106,6 +142,7 @@ class Expense(Base):
     planning_period_id: Mapped[int] = mapped_column(ForeignKey("planning_periods.id"), index=True)
     description: Mapped[str] = mapped_column(String(160))
     amount_cents: Mapped[int] = mapped_column(Integer)
+    currency_id: Mapped[int] = mapped_column(ForeignKey("currencies.id"), default=1)
     expense_date: Mapped[date] = mapped_column(Date)
     payment_method: Mapped[str | None] = mapped_column(String(40), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="posted")

@@ -8,7 +8,7 @@ from app.auth import router as auth_router
 from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.finance import router as finance_router
-from app.finance_models import Category, Household, HouseholdMember
+from app.finance_models import Category, Currency, Household, HouseholdMember
 from app.models import User
 from app.security import hash_password
 
@@ -26,6 +26,11 @@ def initialize_database() -> None:
         return
 
     with SessionLocal() as database:
+        if database.scalar(select(Currency.id).where(Currency.code == "ARS")) is None:
+            database.add(Currency(code="ARS", name="Peso argentino", symbol="$", decimal_places=2))
+        if database.scalar(select(Currency.id).where(Currency.code == "USD")) is None:
+            database.add(Currency(code="USD", name="Dólar estadounidense", symbol="US$", decimal_places=2))
+        database.commit()
         existing_user = database.scalar(
             select(User).where(User.username == settings.test_user_username)
         )
