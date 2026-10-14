@@ -1,11 +1,15 @@
 from datetime import date
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
+from fastapi import HTTPException
 from pydantic import ValidationError
 
-from app.finance import calendar_status, movement_sort_key, recurring_due_for_month
-from app.finance_models import RecurringExpense
-from app.finance_schemas import ExpenseCreate, MovementResponse, PeriodCreate
+from app import finance
+from app.finance import allocation_available_balance, calendar_status, movement_sort_key, recurring_due_for_month
+from app.finance_models import Household, RecurringExpense
+from app.finance_schemas import AllocationCreate, CategoryCreate, CategoryUpdate, ExpenseCreate, MovementResponse, PeriodCreate
 
 
 def test_expense_splits_must_match_total() -> None:
@@ -70,3 +74,63 @@ def test_calendar_status_prioritizes_paid_and_due_states() -> None:
     assert calendar_status(today, False) == "due_soon"
     assert calendar_status(today.fromordinal(today.toordinal() - 1), False) == "overdue"
     assert calendar_status(today.fromordinal(today.toordinal() + 4), False) == "pending"
+
+
+def test_only_assigned_money_is_available_in_an_envelope() -> None:
+    assert allocation_available_balance(25000, 0, 0, 5000) == 20000
+    assert allocation_available_balance(0, 0, 0, 0) == 0
+
+
+def test_category_color_requires_a_hex_value() -> None:
+    assert CategoryUpdate(color="#5B8266").color == "#5B8266"
+    with pytest.raises(ValidationError):
+        CategoryUpdate(color="blue")
+
+
+def test_category_name_is_trimmed_and_cannot_be_blank() -> None:
+    assert CategoryCreate(name="  Mascotas  ").name == "Mascotas"
+    with pytest.raises(ValidationError, match="name cannot be blank"):
+        CategoryCreate(name="   ")
+
+
+def test_create_category_returns_conflict_for_duplicate_name(monkeypatch) -> None:
+    database = Mock()
+    database.scalar.return_value = 1
+    monkeypatch.setattr(finance, "household_for", lambda *_: Household(id=1, name="Casa"))
+
+    with pytest.raises(HTTPException) as error:
+        finance.create_category(
+            CategoryCreate(name="Internet", kind="fixed", color="#5B8266"),
+            SimpleNamespace(),
+            database,
+        )
+
+    assert error.value.status_code == 409
+    assert error.value.detail == "Ya existe una categoría con ese nombre"
+
+
+def test_create_category_persists_a_new_category(monkeypatch) -> None:
+    database = Mock()
+    database.scalar.return_value = None
+    monkeypatch.setattr(finance, "household_for", lambda *_: Household(id=1, name="Casa"))
+
+    def refresh(category) -> None:
+        category.id = 99
+        category.is_active = True
+
+    database.refresh.side_effect = refresh
+    response = finance.create_category(
+        CategoryCreate(name="Mascotas", kind="variable", color="#5B8266"),
+        SimpleNamespace(),
+        database,
+    )
+
+    assert response.id == 99
+    assert response.name == "Mascotas"
+    database.commit.assert_called_once()
+
+
+def test_allocation_can_omit_planned_amount_for_unlimited_envelopes() -> None:
+    allocation = AllocationCreate(category_id=1, reserved_amount_cents=50000)
+
+    assert allocation.planned_amount_cents == 0

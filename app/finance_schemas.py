@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class CategoryCreate(BaseModel):
@@ -9,10 +9,22 @@ class CategoryCreate(BaseModel):
     color: str | None = Field(default=None, pattern="^#[0-9A-Fa-f]{6}$")
     icon: str | None = Field(default=None, max_length=30)
 
+    @field_validator("name")
+    @classmethod
+    def name_cannot_be_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("name cannot be blank")
+        return cleaned
+
 
 class CategoryResponse(CategoryCreate):
     id: int
     is_active: bool
+
+
+class CategoryUpdate(BaseModel):
+    color: str = Field(pattern="^#[0-9A-Fa-f]{6}$")
 
 
 class CurrencyResponse(BaseModel):
@@ -61,7 +73,7 @@ class IncomeResponse(IncomeCreate):
 class AllocationCreate(BaseModel):
     category_id: int
     currency_id: int = 1
-    planned_amount_cents: int = Field(ge=0)
+    planned_amount_cents: int = Field(default=0, ge=0)
     reserved_amount_cents: int = Field(default=0, ge=0)
 
 

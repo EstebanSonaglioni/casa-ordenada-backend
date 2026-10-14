@@ -9,6 +9,8 @@ from app.config import settings
 from app.database import Base, SessionLocal, engine
 from app.finance import router as finance_router
 from app.finance_models import Category, Currency, Household, HouseholdMember
+from app.inventory import router as inventory_router
+from app.inventory_models import InventoryCategory, StorageLocation
 from app.models import User
 from app.security import hash_password
 
@@ -78,6 +80,29 @@ def initialize_database() -> None:
                         ("Futuro", "future", "#F2CC8F"),
                     ]
                 ])
+            if database.scalar(select(InventoryCategory.id).where(InventoryCategory.household_id == household.id)) is None:
+                database.add_all([
+                    InventoryCategory(household_id=household.id, name=name, color=color, icon=icon)
+                    for name, color, icon in [
+                        ("Alimentos", "#5B8266", "food"),
+                        ("Limpieza", "#5C7CFA", "clean"),
+                        ("Higiene", "#9C6ADE", "hygiene"),
+                        ("Bebé", "#F2CC8F", "baby"),
+                        ("Farmacia", "#E07A5F", "medicine"),
+                        ("Otros", "#4D908E", "other"),
+                    ]
+                ])
+            if database.scalar(select(StorageLocation.id).where(StorageLocation.household_id == household.id)) is None:
+                database.add_all([
+                    StorageLocation(household_id=household.id, name=name, kind=kind)
+                    for name, kind in [
+                        ("Heladera", "refrigerated"),
+                        ("Freezer", "frozen"),
+                        ("Alacena", "pantry"),
+                        ("Baño", "bathroom"),
+                        ("Lavadero", "laundry"),
+                    ]
+                ])
             database.commit()
 
 
@@ -97,6 +122,7 @@ app.add_middleware(
 )
 app.include_router(auth_router)
 app.include_router(finance_router)
+app.include_router(inventory_router)
 
 
 @app.get("/health")

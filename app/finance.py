@@ -30,6 +30,7 @@ from app.finance_schemas import (
     AllocationUpdate,
     CategoryCreate,
     CategoryResponse,
+    CategoryUpdate,
     CalendarEventResponse,
     CalendarPaymentRequest,
     ExpenseCreate,
@@ -101,7 +102,12 @@ def allocation_response(allocation: MonthlyAllocation, database: Session) -> All
             AllocationTransfer.from_allocation_id == allocation.id
         )
     ) or 0
-    balance = allocation.planned_amount_cents + incoming - outgoing - spent
+    balance = allocation_available_balance(
+        allocation.reserved_amount_cents,
+        incoming,
+        outgoing,
+        spent,
+    )
     return AllocationResponse(
         id=allocation.id,
         category_id=allocation.category_id,
@@ -111,6 +117,10 @@ def allocation_response(allocation: MonthlyAllocation, database: Session) -> All
         spent_amount_cents=spent,
         balance_cents=balance,
     )
+
+
+def allocation_available_balance(assigned_cents: int, incoming: int, outgoing: int, spent: int) -> int:
+    return assigned_cents + incoming - outgoing - spent
 
 
 def period_response(period: PlanningPeriod) -> PeriodResponse:
@@ -233,11 +243,44 @@ def create_category(
     database: Session = Depends(get_db),
 ):
     household = household_for(user, database)
+    existing = database.scalar(select(Category.id).where(
+        Category.household_id == household.id,
+        Category.name == data.name,
+    ))
+    if existing is not None:
+        raise HTTPException(status_code=409, detail="Ya existe una categoría con ese nombre")
     category = Category(household_id=household.id, **data.model_dump())
     database.add(category)
     database.commit()
     database.refresh(category)
     return CategoryResponse(id=category.id, is_active=category.is_active, **data.model_dump())
+
+
+@router.patch("/categories/{category_id}", response_model=CategoryResponse)
+def update_category(
+    category_id: int,
+    data: CategoryUpdate,
+    user: User = Depends(get_current_user),
+    database: Session = Depends(get_db),
+):
+    household = household_for(user, database)
+    category = database.scalar(select(Category).where(
+        Category.id == category_id,
+        Category.household_id == household.id,
+    ))
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found")
+    category.color = data.color
+    database.commit()
+    database.refresh(category)
+    return CategoryResponse(
+        id=category.id,
+        name=category.name,
+        kind=category.kind,
+        color=category.color,
+        icon=category.icon,
+        is_active=category.is_active,
+    )
 
 
 @router.post("/periods", response_model=PeriodResponse, status_code=201)
@@ -307,7 +350,7 @@ def list_movements(
         period = period_by_id[allocation.planning_period_id]
         movements.append(MovementResponse(
             id=f"allocation-{allocation.id}", kind="allocation", direction="out", movement_date=date(period.year, period.month, 1),
-            title="Dinero separado en sobre", amount_cents=allocation.planned_amount_cents, currency_id=allocation.currency_id,
+            title="Dinero asignado al sobre", amount_cents=allocation.reserved_amount_cents, currency_id=allocation.currency_id,
             period_id=period.id, allocation_id=allocation.id, category_id=allocation.category_id,
         ))
 
@@ -692,7 +735,7 @@ def period_summary(
         allocated_cents=allocated,
         reserved_future_cents=reserved,
         spent_cents=spent,
-        balance_cents=income - allocated - reserved,
+        balance_cents=income - reserved,
         allocations=allocation_items,
     )
 
@@ -783,7 +826,7 @@ def rollover_period(
                     planning_period_id=next_period.id,
                     category_id=allocation.category_id,
                     currency_id=allocation.currency_id,
-                    planned_amount_cents=current.balance_cents,
+                    reserved_amount_cents=current.balance_cents,
                 )
             )
     period.status = "closed"

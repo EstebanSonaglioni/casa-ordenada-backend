@@ -18,3 +18,20 @@
 - Endpoint de calendario mensual para vencimientos recurrentes y gastos previstos.
 - Registro de pagos por vencimiento recurrente y actualización de estado de pagos previstos.
 - Endpoints para editar y eliminar sobres sin movimientos.
+- Endpoint para actualizar el color de la categoría asociada a un sobre.
+
+### Fixed
+
+- Migración inicial de Inventario tolera tablas existentes sin versión Alembic registrada.
+- CORS admite `https://localhost` para WebView de Capacitor.
+- El saldo general y disponible de cada sobre usan solo el monto asignado; el
+  monto planificado queda como meta informativa.
+- La creación de una categoría duplicada devuelve `409` con un mensaje claro.
+- El monto planificado de un sobre es opcional y toma valor cero por defecto.
+- Modelos, migración y API de inventario por lote, productos, ubicaciones, lista de compras y checkout financiero.
+- Subcategorías, iconos editables, historial filtrable y edición de fecha/comercio de compras.
+- Apertura parcial de lotes por unidades y campo de cantidad abierta.
+
+### Changed
+
+- CORS admite orígenes de Capacitor durante el desarrollo Android local.
