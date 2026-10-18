@@ -1,4 +1,5 @@
 fastapi==0.115.6
+httpx==0.28.1
 alembic==1.14.0
 pwdlib[argon2]==0.2.1
 PyJWT==2.10.1

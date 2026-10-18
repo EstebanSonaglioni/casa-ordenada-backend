@@ -29,3 +29,14 @@ JWT de acceso. Sus grupos principales son:
 - `/api/v1/periods/{id}/transfers`: transferencias entre sobres.
 - `/api/v1/periods/{id}/rollover`: cierre y traspaso de saldos positivos al
   período siguiente.
+- `/api/v1/integrations/mercadopago/reserves`: reservas detectadas desde
+  reportes de liberación (`is_reserve=true`).
+- `/api/v1/integrations/mercadopago/movements`: movimientos externos
+  sincronizados.
+- `/api/v1/integrations/mercadopago/sync`: sincronización manual; requiere el
+  Access Token del backend.
+
+Los movimientos Account Money se importan desde reportes CSV generados por
+Mercado Pago. Si `/v1/account/settlement_report/list` devuelve una lista vacía,
+primero hay que generar el reporte desde el panel de reportes de Mercado Pago y
+luego volver a ejecutar la sincronización.

@@ -24,6 +24,9 @@
 
 - Migración inicial de Inventario tolera tablas existentes sin versión Alembic registrada.
 - CORS admite `https://localhost` para WebView de Capacitor.
+- Integración server-side de Mercado Pago con sincronización configurable, reservas y vinculación de movimientos a sobres.
+- Uso del endpoint oficial de reportes de liberación para detectar reservas.
+- Importación de filas del reporte Account Money con deduplicación por `SOURCE_ID`.
 - El saldo general y disponible de cada sobre usan solo el monto asignado; el
   monto planificado queda como meta informativa.
 - La creación de una categoría duplicada devuelve `409` con un mensaje claro.

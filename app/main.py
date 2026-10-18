@@ -11,6 +11,7 @@ from app.finance import router as finance_router
 from app.finance_models import Category, Currency, Household, HouseholdMember
 from app.inventory import router as inventory_router
 from app.inventory_models import InventoryCategory, StorageLocation
+from app.integrations import router as integrations_router
 from app.models import User
 from app.security import hash_password
 
@@ -123,6 +124,7 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(finance_router)
 app.include_router(inventory_router)
+app.include_router(integrations_router)
 
 
 @app.get("/health")
