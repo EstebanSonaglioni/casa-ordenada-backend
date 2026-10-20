@@ -4,6 +4,16 @@ API de gestión del hogar basada en FastAPI.
 
 ## Desarrollo
 
+Con Docker Compose, las migraciones Alembic se ejecutan automáticamente antes
+de iniciar FastAPI:
+
+```sh
+docker compose --env-file .env -f docker-compose.yml -f docker-compose.local.yml up --build
+```
+
+El servicio `backend` queda detenido si una migración falla, para evitar que la
+API arranque contra un esquema incompleto.
+
 ```sh
 python -m venv .venv
 . .venv/bin/activate
@@ -13,6 +23,14 @@ uvicorn app.main:app --reload
 
 La configuración se carga desde variables de entorno. No se deben commitear
 archivos `.env`.
+
+## Producción
+
+El despliegue recomendado se realiza desde el `docker-compose.yml` del
+repositorio general. El contenedor ejecuta las migraciones Alembic antes de
+iniciar Uvicorn. Si se ejecuta la imagen de forma independiente, proporcionar
+`DATABASE_URL`, `JWT_SECRET_KEY` y las demás variables desde el entorno del
+servidor; no copiar archivos `.env` dentro de la imagen.
 
 ## API financiera
 

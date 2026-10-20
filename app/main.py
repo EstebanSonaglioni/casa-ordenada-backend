@@ -1,6 +1,7 @@
+import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import select, text
 
@@ -10,8 +11,13 @@ from app.database import Base, SessionLocal, engine
 from app.finance import router as finance_router
 from app.finance_models import Category, Currency, Household, HouseholdMember
 from app.inventory import router as inventory_router
+from app.health import router as health_router
+from app.assistant import router as assistant_router
+from app.assistant import cleanup_expired
 from app.inventory_models import InventoryCategory, StorageLocation
 from app.integrations import router as integrations_router
+from app.household import router as household_router
+from app.household_context import active_household_id
 from app.models import User
 from app.security import hash_password
 
@@ -25,6 +31,8 @@ def initialize_database() -> None:
                 "role VARCHAR(50) NOT NULL DEFAULT 'member'"
             )
         )
+        connection.execute(text("ALTER TABLE users ADD COLUMN IF NOT EXISTS display_name VARCHAR(120)"))
+        connection.execute(text("UPDATE users SET display_name = username WHERE display_name IS NULL"))
     if not settings.test_user_username or not settings.test_user_password:
         return
 
@@ -41,6 +49,7 @@ def initialize_database() -> None:
             database.add(
                 User(
                     username=settings.test_user_username,
+                    display_name=settings.test_user_username,
                     password_hash=hash_password(settings.test_user_password),
                     role=settings.test_user_role,
                 )
@@ -107,10 +116,25 @@ def initialize_database() -> None:
             database.commit()
 
 
+async def assistant_cleanup_loop() -> None:
+    while True:
+        await asyncio.sleep(3600)
+        with SessionLocal() as database:
+            cleanup_expired(database)
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     initialize_database()
-    yield
+    cleanup_task = asyncio.create_task(assistant_cleanup_loop())
+    try:
+        yield
+    finally:
+        cleanup_task.cancel()
+        try:
+            await cleanup_task
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(title="Casa Ordenada API", lifespan=lifespan)
@@ -121,10 +145,27 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def active_household_middleware(request: Request, call_next):
+    raw_household_id = request.headers.get("X-Household-ID")
+    try:
+        household_id = int(raw_household_id) if raw_household_id else None
+    except ValueError:
+        household_id = None
+    token = active_household_id.set(household_id)
+    try:
+        return await call_next(request)
+    finally:
+        active_household_id.reset(token)
 app.include_router(auth_router)
 app.include_router(finance_router)
 app.include_router(inventory_router)
+app.include_router(health_router)
+app.include_router(assistant_router)
 app.include_router(integrations_router)
+app.include_router(household_router)
 
 
 @app.get("/health")

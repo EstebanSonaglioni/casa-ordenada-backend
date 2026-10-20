@@ -5,11 +5,12 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import User
-from app.schemas import LoginRequest, RefreshRequest, TokenResponse
+from app.schemas import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse
 from app.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
+    hash_password,
     verify_password,
 )
 
@@ -49,6 +50,23 @@ def login(credentials: LoginRequest, database: Session = Depends(get_db)) -> Tok
             detail="Invalid username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    return tokens_for(user.username, user.role)
+
+
+@router.post("/register", response_model=TokenResponse, status_code=201)
+def register(data: RegisterRequest, database: Session = Depends(get_db)) -> TokenResponse:
+    username = data.username.strip()
+    if database.scalar(select(User.id).where(User.username == username)) is not None:
+        raise HTTPException(status_code=409, detail="El nombre de usuario ya está en uso")
+    user = User(
+        username=username,
+        display_name=data.display_name.strip(),
+        password_hash=hash_password(data.password),
+        role="member",
+    )
+    database.add(user)
+    database.commit()
+    database.refresh(user)
     return tokens_for(user.username, user.role)
 
 

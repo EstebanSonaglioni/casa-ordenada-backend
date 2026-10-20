@@ -11,6 +11,7 @@ class User(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(String(255))
     role: Mapped[str] = mapped_column(String(50), default="member", server_default="member")
     created_at: Mapped[datetime] = mapped_column(

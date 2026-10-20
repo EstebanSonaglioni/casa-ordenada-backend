@@ -130,12 +130,35 @@ class RecurringCreate(BaseModel):
 
 
 class PlannedCreate(BaseModel):
-    category_id: int
+    category_id: int | None = None
     currency_id: int = 1
     description: str = Field(min_length=1, max_length=160)
     estimated_amount_cents: int = Field(gt=0)
     target_date: date
     notes: str | None = None
+    tags: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("tags")
+    @classmethod
+    def normalize_tags(cls, values: list[str]) -> list[str]:
+        result = []
+        for value in values:
+            value = value.strip().lstrip("#")
+            if value and value not in result:
+                result.append(value)
+        return result
+
+
+class PlannedResponse(BaseModel):
+    id: int
+    category_id: int | None
+    currency_id: int
+    description: str
+    estimated_amount_cents: int
+    target_date: date
+    status: str
+    notes: str | None
+    tags: list[str]
 
 
 class TransferCreate(BaseModel):
@@ -176,11 +199,27 @@ class CalendarEventResponse(BaseModel):
     kind: str
     due_date: date
     title: str
-    amount_cents: int
-    currency_id: int
-    category_id: int
+    amount_cents: int | None
+    currency_id: int | None
+    category_id: int | None
     source_id: int
     status: str
+    notes: str | None = None
+
+
+class ManualCalendarEventCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=160)
+    event_type: str = Field(default="other", pattern="^(salary|card_closing|invoice_closing|other)$")
+    event_date: date
+    notes: str | None = Field(default=None, max_length=500)
+
+    @field_validator("title")
+    @classmethod
+    def title_cannot_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("title cannot be blank")
+        return value
 
 
 class CalendarPaymentRequest(BaseModel):
@@ -188,3 +227,9 @@ class CalendarPaymentRequest(BaseModel):
     source_id: int
     due_date: date
     paid: bool = True
+
+
+class CalendarMoveRequest(BaseModel):
+    source_id: int
+    from_date: date
+    to_date: date

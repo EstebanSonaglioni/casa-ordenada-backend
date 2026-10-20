@@ -19,6 +19,8 @@ from app.finance_models import (
     HouseholdMember,
     Income,
     MonthlyAllocation,
+    ManualCalendarEvent,
+    RecurringDueDateOverride,
     PlannedExpense,
     PlanningPeriod,
     RecurringExpense,
@@ -41,24 +43,32 @@ from app.finance_schemas import (
     PeriodCreate,
     PeriodResponse,
     PlannedCreate,
+    PlannedResponse,
     RecurringCreate,
     SummaryResponse,
     TransferCreate,
     CurrencyResponse,
     ExchangeRateCreate,
     ExchangeRateResponse,
+    ManualCalendarEventCreate,
+    CalendarMoveRequest,
 )
 from app.models import User
+from app.household_context import active_household_id
 
 router = APIRouter(prefix="/api/v1", tags=["finance"])
 
 
 def household_for(user: User, database: Session) -> Household:
-    household = database.scalar(
+    query = (
         select(Household)
         .join(HouseholdMember, HouseholdMember.household_id == Household.id)
         .where(HouseholdMember.user_id == user.id)
     )
+    selected_id = active_household_id.get()
+    if selected_id is not None:
+        query = query.where(Household.id == selected_id)
+    household = database.scalar(query)
     if household is None:
         raise HTTPException(status_code=404, detail="Household not found")
     return household
@@ -181,6 +191,20 @@ def calendar_status(due_date: date, paid: bool) -> str:
     if due_date <= today.fromordinal(today.toordinal() + 3):
         return "due_soon"
     return "pending"
+
+
+def planned_response(item: PlannedExpense) -> PlannedResponse:
+    return PlannedResponse(
+        id=item.id,
+        category_id=item.category_id,
+        currency_id=item.currency_id,
+        description=item.description,
+        estimated_amount_cents=item.estimated_amount_cents,
+        target_date=item.target_date,
+        status=item.status,
+        notes=item.notes,
+        tags=[tag for tag in item.tags.split(",") if tag],
+    )
 
 
 @router.get("/currencies", response_model=list[CurrencyResponse])
@@ -433,7 +457,12 @@ def calendar_events(
         )
     }
     for item in recurring:
-        due_date = recurring_due_for_month(item, year, month)
+        override = database.scalar(select(RecurringDueDateOverride).where(
+            RecurringDueDateOverride.recurring_expense_id == item.id,
+            RecurringDueDateOverride.year == year,
+            RecurringDueDateOverride.month == month,
+        ))
+        due_date = override.due_date if override is not None else recurring_due_for_month(item, year, month)
         if due_date is not None:
             events.append(CalendarEventResponse(
                 id=f"recurring-{item.id}-{year}-{month}", kind="recurring", due_date=due_date,
@@ -456,7 +485,82 @@ def calendar_events(
                 category_id=item.category_id, source_id=item.id,
                 status=calendar_status(item.target_date, item.status == "paid"),
             ))
+    manual = database.scalars(select(ManualCalendarEvent).where(
+        ManualCalendarEvent.household_id == household.id,
+        ManualCalendarEvent.event_date >= month_start,
+        ManualCalendarEvent.event_date <= month_end,
+    )).all()
+    for item in manual:
+        events.append(CalendarEventResponse(
+            id=f"manual-{item.id}", kind="manual", due_date=item.event_date,
+            title=item.title, amount_cents=None, currency_id=None, category_id=None,
+            source_id=item.id, status="scheduled", notes=item.notes,
+        ))
     return sorted(events, key=lambda item: (item.due_date, item.id))
+
+
+@router.post("/calendar/events", response_model=CalendarEventResponse, status_code=201)
+def create_manual_calendar_event(
+    data: ManualCalendarEventCreate,
+    user: User = Depends(get_current_user),
+    database: Session = Depends(get_db),
+):
+    household = household_for(user, database)
+    event = ManualCalendarEvent(household_id=household.id, created_by=user.id, **data.model_dump())
+    database.add(event)
+    database.commit()
+    database.refresh(event)
+    return CalendarEventResponse(
+        id=f"manual-{event.id}", kind="manual", due_date=event.event_date,
+        title=event.title, amount_cents=None, currency_id=None, category_id=None,
+        source_id=event.id, status="scheduled", notes=event.notes,
+    )
+
+
+@router.post("/calendar/recurring/move", response_model=CalendarEventResponse)
+def move_recurring_calendar_event(
+    data: CalendarMoveRequest,
+    user: User = Depends(get_current_user),
+    database: Session = Depends(get_db),
+):
+    household = household_for(user, database)
+    item = database.scalar(select(RecurringExpense).where(RecurringExpense.id == data.source_id, RecurringExpense.household_id == household.id))
+    if item is None or data.from_date.year != data.to_date.year or data.from_date.month != data.to_date.month:
+        raise HTTPException(status_code=400, detail="La nueva fecha debe pertenecer al mismo mes")
+    expected = recurring_due_for_month(item, data.from_date.year, data.from_date.month)
+    override = database.scalar(select(RecurringDueDateOverride).where(
+        RecurringDueDateOverride.recurring_expense_id == item.id,
+        RecurringDueDateOverride.year == data.from_date.year,
+        RecurringDueDateOverride.month == data.from_date.month,
+    ))
+    current_date = override.due_date if override is not None else expected
+    if current_date != data.from_date:
+        raise HTTPException(status_code=409, detail="El vencimiento ya cambió; recargá el calendario")
+    if override is None:
+        override = RecurringDueDateOverride(recurring_expense_id=item.id, year=data.from_date.year, month=data.from_date.month, due_date=data.to_date)
+        database.add(override)
+    else:
+        override.due_date = data.to_date
+    database.commit()
+    return CalendarEventResponse(
+        id=f"recurring-{item.id}-{data.to_date.year}-{data.to_date.month}", kind="recurring", due_date=data.to_date,
+        title=item.name, amount_cents=item.amount_cents, currency_id=item.currency_id, category_id=item.category_id,
+        source_id=item.id, status=calendar_status(data.to_date, False),
+    )
+
+
+@router.delete("/calendar/events/{event_id}", status_code=204)
+def delete_manual_calendar_event(
+    event_id: int,
+    user: User = Depends(get_current_user),
+    database: Session = Depends(get_db),
+):
+    household = household_for(user, database)
+    event = database.scalar(select(ManualCalendarEvent).where(ManualCalendarEvent.id == event_id, ManualCalendarEvent.household_id == household.id))
+    if event is None:
+        raise HTTPException(status_code=404, detail="Calendar event not found")
+    database.delete(event)
+    database.commit()
 
 
 @router.post("/calendar/payments", response_model=CalendarEventResponse)
@@ -471,7 +575,13 @@ def set_calendar_payment(
             RecurringExpense.id == data.source_id,
             RecurringExpense.household_id == household.id,
         ))
-        if item is None or recurring_due_for_month(item, data.due_date.year, data.due_date.month) != data.due_date:
+        override = database.scalar(select(RecurringDueDateOverride).where(
+            RecurringDueDateOverride.recurring_expense_id == data.source_id,
+            RecurringDueDateOverride.year == data.due_date.year,
+            RecurringDueDateOverride.month == data.due_date.month,
+        ))
+        expected_date = override.due_date if override is not None else (recurring_due_for_month(item, data.due_date.year, data.due_date.month) if item is not None else None)
+        if item is None or expected_date != data.due_date:
             raise HTTPException(status_code=404, detail="Recurring payment not found")
         payment = database.scalar(select(RecurringPayment).where(
             RecurringPayment.recurring_expense_id == item.id,
@@ -775,23 +885,25 @@ def create_planned(
     database: Session = Depends(get_db),
 ):
     household = household_for(user, database)
-    category = database.scalar(select(Category).where(Category.id == data.category_id, Category.household_id == household.id))
-    if category is None:
+    if data.category_id is not None and database.scalar(select(Category.id).where(Category.id == data.category_id, Category.household_id == household.id)) is None:
         raise HTTPException(status_code=404, detail="Category not found")
     currency_for(data.currency_id, database)
-    item = PlannedExpense(household_id=household.id, **data.model_dump())
+    values = data.model_dump(exclude={"tags"})
+    values["tags"] = ",".join(data.tags)
+    item = PlannedExpense(household_id=household.id, **values)
     database.add(item)
     database.commit()
     database.refresh(item)
-    return item
+    return planned_response(item)
 
 
-@router.get("/planned-expenses")
+@router.get("/planned-expenses", response_model=list[PlannedResponse])
 def list_planned(user: User = Depends(get_current_user), database: Session = Depends(get_db)):
     household = household_for(user, database)
-    return database.scalars(
+    items = database.scalars(
         select(PlannedExpense).where(PlannedExpense.household_id == household.id).order_by(PlannedExpense.target_date)
     ).all()
+    return [planned_response(item) for item in items]
 
 
 @router.post("/periods/{period_id}/rollover", response_model=PeriodResponse, status_code=201)

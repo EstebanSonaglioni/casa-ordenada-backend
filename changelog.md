@@ -4,6 +4,14 @@
 
 ### Added
 
+- Registro con nombre visible, casas múltiples e invitaciones con historial y vencimiento.
+- Notificaciones de invitaciones en tiempo real mediante WebSocket.
+- Contexto de casa activa validado por membresía para todos los módulos autenticados.
+- Eventos manuales de calendario por casa, con tipos, notas y eliminación.
+- El arranque en Docker Compose ejecuta Alembic antes de iniciar Uvicorn.
+- Se pueden guardar excepciones mensuales para mover vencimientos recurrentes sin cambiar su regla habitual.
+- Los gastos futuros ya no requieren categoría y admiten tags.
+
 - API FastAPI inicial con endpoint de login y renovación de tokens JWT.
 - Modelo de usuario con contraseña hasheada y seed configurable para desarrollo.
 - Roles persistidos en usuarios y propagados en tokens de autenticación.
@@ -19,6 +27,8 @@
 - Registro de pagos por vencimiento recurrente y actualización de estado de pagos previstos.
 - Endpoints para editar y eliminar sobres sin movimientos.
 - Endpoint para actualizar el color de la categoría asociada a un sobre.
+- Registro personal de ejercicio por casa, con API, resumen diario y mapa anual.
+- Asistente de audio con transcripción OpenAI, propuestas editables y confirmación para compras y ejercicio.
 
 ### Fixed
 

@@ -24,6 +24,34 @@ class HouseholdMember(Base):
     role: Mapped[str] = mapped_column(String(50), default="member")
 
 
+class HouseholdInvitation(Base):
+    __tablename__ = "household_invitations"
+    __table_args__ = (UniqueConstraint("household_id", "invited_user_id", "status"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    household_id: Mapped[int] = mapped_column(ForeignKey("households.id"), index=True)
+    invited_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    invited_by_user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    role: Mapped[str] = mapped_column(String(50), default="member")
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    responded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class ManualCalendarEvent(Base):
+    __tablename__ = "manual_calendar_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    household_id: Mapped[int] = mapped_column(ForeignKey("households.id"), index=True)
+    title: Mapped[str] = mapped_column(String(160))
+    event_type: Mapped[str] = mapped_column(String(40), default="other")
+    event_date: Mapped[date] = mapped_column(Date)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_by: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
 class Category(Base):
     __tablename__ = "categories"
     __table_args__ = (UniqueConstraint("household_id", "name"),)
@@ -98,6 +126,17 @@ class RecurringExpense(Base):
     active: Mapped[bool] = mapped_column(default=True)
 
 
+class RecurringDueDateOverride(Base):
+    __tablename__ = "recurring_due_date_overrides"
+    __table_args__ = (UniqueConstraint("recurring_expense_id", "year", "month"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recurring_expense_id: Mapped[int] = mapped_column(ForeignKey("recurring_expenses.id", ondelete="CASCADE"), index=True)
+    year: Mapped[int] = mapped_column(Integer)
+    month: Mapped[int] = mapped_column(Integer)
+    due_date: Mapped[date] = mapped_column(Date)
+
+
 class RecurringPayment(Base):
     __tablename__ = "recurring_payments"
     __table_args__ = (UniqueConstraint("recurring_expense_id", "due_date"),)
@@ -113,13 +152,14 @@ class PlannedExpense(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     household_id: Mapped[int] = mapped_column(ForeignKey("households.id"), index=True)
-    category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), nullable=True)
     description: Mapped[str] = mapped_column(String(160))
     estimated_amount_cents: Mapped[int] = mapped_column(Integer)
     currency_id: Mapped[int] = mapped_column(ForeignKey("currencies.id"), default=1)
     target_date: Mapped[date] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(20), default="planned")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    tags: Mapped[str] = mapped_column(Text, default="", server_default="")
 
 
 class MonthlyAllocation(Base):

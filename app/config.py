@@ -28,6 +28,11 @@ class Settings:
         "MERCADOPAGO_RESERVES_URL",
         "https://api.mercadopago.com/v1/account/release_report/list",
     )
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    openai_transcription_model: str = os.getenv("OPENAI_TRANSCRIPTION_MODEL", "gpt-4o-mini-transcribe")
+    openai_interpretation_model: str = os.getenv("OPENAI_INTERPRETATION_MODEL", "gpt-5.1")
+    assistant_audio_dir: str = os.getenv("ASSISTANT_AUDIO_DIR", "/var/lib/casa-ordenada/audio")
+    assistant_audio_retention_days: int = int(os.getenv("ASSISTANT_AUDIO_RETENTION_DAYS", "7"))
 
 
 settings = Settings()
