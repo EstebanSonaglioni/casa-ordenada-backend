@@ -34,6 +34,7 @@
 
 - La migración de subcategorías de Inventario es idempotente cuando la columna `icon` ya existe.
 - La migración de apertura parcial de Inventario es idempotente cuando `quantity_opened` ya existe.
+- Las migraciones de Mercado Pago, Salud, asistente, invitaciones, calendario y tags toleran tablas, índices y columnas existentes.
 - Migración inicial de Inventario tolera tablas existentes sin versión Alembic registrada.
 - CORS admite `https://localhost` para WebView de Capacitor.
 - Integración server-side de Mercado Pago con sincronización configurable, reservas y vinculación de movimientos a sobres.

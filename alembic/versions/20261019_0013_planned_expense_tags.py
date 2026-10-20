@@ -2,6 +2,7 @@
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 revision = "20261019_0013"
 down_revision = "20261019_0012"
@@ -11,7 +12,9 @@ depends_on = None
 
 def upgrade() -> None:
     op.alter_column("planned_expenses", "category_id", nullable=True)
-    op.add_column("planned_expenses", sa.Column("tags", sa.Text(), nullable=False, server_default=""))
+    columns = {column["name"] for column in inspect(op.get_bind()).get_columns("planned_expenses")}
+    if "tags" not in columns:
+        op.add_column("planned_expenses", sa.Column("tags", sa.Text(), nullable=False, server_default=""))
 
 
 def downgrade() -> None:

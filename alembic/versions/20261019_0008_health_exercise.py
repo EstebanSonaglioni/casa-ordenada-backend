@@ -2,6 +2,7 @@
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 revision = "20261019_0008"
 down_revision = "20261003_0007"
@@ -10,7 +11,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
+    bind = op.get_bind()
+    if "exercise_entries" not in inspect(bind).get_table_names():
+        op.create_table(
         "exercise_entries",
         sa.Column("id", sa.Integer, primary_key=True),
         sa.Column("household_id", sa.Integer, sa.ForeignKey("households.id"), nullable=False),
@@ -21,10 +24,15 @@ def upgrade() -> None:
         sa.Column("notes", sa.Text),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-    )
-    op.create_index("ix_exercise_entries_household_id", "exercise_entries", ["household_id"])
-    op.create_index("ix_exercise_entries_user_id", "exercise_entries", ["user_id"])
-    op.create_index("ix_exercise_entries_performed_on", "exercise_entries", ["performed_on"])
+        )
+    indexes = {index["name"] for index in inspect(bind).get_indexes("exercise_entries")}
+    for name, columns in {
+        "ix_exercise_entries_household_id": ["household_id"],
+        "ix_exercise_entries_user_id": ["user_id"],
+        "ix_exercise_entries_performed_on": ["performed_on"],
+    }.items():
+        if name not in indexes:
+            op.create_index(name, "exercise_entries", columns)
 
 
 def downgrade() -> None:

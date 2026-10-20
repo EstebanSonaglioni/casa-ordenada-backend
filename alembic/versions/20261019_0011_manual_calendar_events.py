@@ -2,6 +2,7 @@
 
 from alembic import op
 import sqlalchemy as sa
+from sqlalchemy import inspect
 
 revision = "20261019_0011"
 down_revision = "20261019_0010"
@@ -10,7 +11,9 @@ depends_on = None
 
 
 def upgrade() -> None:
-    op.create_table(
+    bind = op.get_bind()
+    if "manual_calendar_events" not in inspect(bind).get_table_names():
+        op.create_table(
         "manual_calendar_events",
         sa.Column("id", sa.Integer(), primary_key=True),
         sa.Column("household_id", sa.Integer(), sa.ForeignKey("households.id"), nullable=False),
@@ -20,8 +23,9 @@ def upgrade() -> None:
         sa.Column("notes", sa.Text(), nullable=True),
         sa.Column("created_by", sa.Integer(), sa.ForeignKey("users.id"), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-    )
-    op.create_index("ix_manual_calendar_events_household_id", "manual_calendar_events", ["household_id"])
+        )
+    if "ix_manual_calendar_events_household_id" not in {index["name"] for index in inspect(bind).get_indexes("manual_calendar_events")}: 
+        op.create_index("ix_manual_calendar_events_household_id", "manual_calendar_events", ["household_id"])
 
 
 def downgrade() -> None:
