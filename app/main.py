@@ -20,6 +20,7 @@ from app.household import router as household_router
 from app.household_context import active_household_id
 from app.models import User
 from app.security import hash_password
+from app.tasks import router as tasks_router
 
 
 def initialize_database() -> None:
@@ -166,6 +167,7 @@ app.include_router(health_router)
 app.include_router(assistant_router)
 app.include_router(integrations_router)
 app.include_router(household_router)
+app.include_router(tasks_router)
 
 
 @app.get("/health")

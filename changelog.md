@@ -4,6 +4,8 @@
 
 ### Added
 
+- API de tareas domésticas con recurrencias, ocurrencias completables por fecha,
+  asignación a miembros del hogar y calendario.
 - Registro con nombre visible, casas múltiples e invitaciones con historial y vencimiento.
 - Notificaciones de invitaciones en tiempo real mediante WebSocket.
 - Contexto de casa activa validado por membresía para todos los módulos autenticados.
